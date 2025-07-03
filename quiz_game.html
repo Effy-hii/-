@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+
+<head>
+  <meta charset="UTF-8">
+  <title>חידון כיתתי</title>
+  <link href="https://fonts.googleapis.com/css2?family=Alef&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Alef', sans-serif;
+      background: linear-gradient(to bottom right, #d0f0f7, #f0f8ff);
+      margin: 0;
+      padding: 20px;
+      direction: rtl;
+      text-align: center;
+      color: #003366;
+    }
+    h2, h3 {
+      color: #0077b6;
+    }
+    button {
+      font-family: 'Alef', sans-serif;
+      font-size: 1.2em;
+      padding: 12px 24px;
+      margin: 10px;
+      border: none;
+      border-radius: 10px;
+      background-color: #00b4d8;
+      color: white;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background-color: #0096c7;
+    }
+    #drop-zone {
+      border: 2px dashed #00b4d8;
+      border-radius: 10px;
+      padding: 30px;
+      color: #0096c7;
+      margin: 20px auto;
+      max-width: 500px;
+      background: #e0f7fa;
+    }
+    .hidden { display: none; }
+    #scoreboard, #team-turn, #quiz-question, #quiz-answers, #timer {
+      margin: 15px 0;
+    }
+    #quiz-answers button {
+      display: block;
+      width: 80%;
+      margin: 10px auto;
+    }
+    #confetti-canvas {
+      pointer-events: none;
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      z-index: 9999;
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Confetti Canvas -->
+  <canvas id="confetti-canvas"></canvas>
+
+  <!-- Background Music -->
+  <audio id="bg-music" src="dramatic_music.mpeg" loop></audio>
+
+  <!-- Start Panel -->
+  <div id="start-panel">
+    <h2>ברוכים הבאים למשחק הטריוויה</h2>
+    <button onclick="chooseCreate()">צור שאלות</button>
+    <button onclick="chooseUpload()">העלה קובץ שאלות</button>
+  </div>
+
+  <!-- Create Questions Panel -->
+  <div id="create-panel" class="hidden">
+    <h2>צור שאלה</h2>
+    <label>שאלה:<br>
+      <input type="text" id="question-input" style="width: 100%;">
+    </label>
+    <div>
+      <h4>תשובות (בחר את התשובה הנכונה):</h4>
+      <div>
+        <input type="radio" name="correct" id="a0" value="0">
+        <input type="text" id="answer0" style="width: 80%;">
+      </div>
+      <div>
+        <input type="radio" name="correct" id="a1" value="1">
+        <input type="text" id="answer1" style="width: 80%;">
+      </div>
+      <div>
+        <input type="radio" name="correct" id="a2" value="2">
+        <input type="text" id="answer2" style="width: 80%;">
+      </div>
+      <div>
+        <input type="radio" name="correct" id="a3" value="3">
+        <input type="text" id="answer3" style="width: 80%;">
+      </div>
+    </div>
+    <button onclick="addQuestion()">הוסף שאלה</button>
+    <button onclick="finishInput()">סיים והורד</button>
+    <div id="create-error" style="color:red;"></div>
+    <hr>
+    <div id="questions-count"></div>
+    <button onclick="backToStart()">חזור</button>
+  </div>
+
+  <!-- Upload Questions Panel -->
+  <div id="upload-panel" class="hidden">
+    <h2>העלה קובץ שאלות</h2>
+    <div id="drop-zone">
+      גרור ושחרר כאן את קובץ ה־<b>.txt</b> שלך<br>או<br>
+      <input type="file" id="file-input" accept=".txt">
+    </div>
+    <div id="upload-error" style="color:red;"></div>
+    <button onclick="backToStart()">חזור</button>
+  </div>
+
+  <!-- Team Names Panel -->
+  <div id="team-names-panel" class="hidden">
+    <h2>הכנס שמות קבוצות</h2>
+    <label>שם קבוצה 1:<br>
+      <input type="text" id="team1-input" maxlength="20" placeholder="Team 1">
+    </label><br>
+    <label>שם קבוצה 2:<br>
+      <input type="text" id="team2-input" maxlength="20" placeholder="Team 2">
+    </label><br><br>
+    <button onclick="startQuizWithTeams()">התחל חידון</button>
+    <div id="team-names-error" style="color:red;"></div>
+  </div>
+
+  <!-- Quiz Panel -->
+  <div id="quiz-panel" class="hidden" style="position:relative;">
+    <button id="pause-btn" onclick="togglePause()" style="display:none;">השהה</button>
+    <h2>זמן חידון!</h2>
+    <div id="scoreboard"></div>
+    <div id="team-turn"></div>
+    <div id="quiz-question"></div>
+    <div id="quiz-answers"></div>
+    <div class="timer" id="timer"></div>
+    <button id="next-btn" class="hidden" onclick="nextQuizQuestion()">הבא</button>
+  </div>
+
+  <!-- Result Panel -->
+  <div id="result-panel" class="hidden">
+    <h2>החידון הסתיים!</h2>
+    <div id="result"></div>
+    <button onclick="restartQuiz()">התחל מחדש</button>
+  </div>
+
+  <script>
+    // --- Navigation ---
+    function showPanel(panelId) {
+      ['start-panel', 'create-panel', 'upload-panel', 'team-names-panel', 'quiz-panel', 'result-panel']
+        .forEach(id => document.getElementById(id).classList.add('hidden'));
+      document.getElementById(panelId).classList.remove('hidden');
+    }
+
+    function chooseCreate() {
+      showPanel('create-panel');
+    }
+
+    function chooseUpload() {
+      showPanel('upload-panel');
+    }
+
+    function backToStart() {
+      stopMusic();
+      showPanel('start-panel');
+      clearCreatePanel();
+      questions = [];
+      questionsCount.textContent = '';
+      createError.textContent = '';
+      uploadError.textContent = '';
+    }
+
+    // --- Question creation logic ---
+    let questions = [];
+    let createError = document.getElementById('create-error');
+    let questionsCount = document.getElementById('questions-count');
+    let uploadError = document.getElementById('upload-error');
+
+    function clearCreatePanel() {
+      document.getElementById('question-input').value = '';
+      for (let i = 0; i < 4; i++) {
+        document.getElementById('answer' + i).value = '';
+        document.getElementById('a' + i).checked = false;
+      }
+      createError.textContent = '';
+    }
+
+    function addQuestion() {
+      let q = document.getElementById('question-input').value.trim();
+      let answers = [];
+      for (let i = 0; i < 4; i++) {
+        answers.push(document.getElementById('answer' + i).value.trim());
+      }
+      let correct = Array.from(document.getElementsByName('correct')).findIndex(r => r.checked);
+
+      if (!q) {
+        createError.textContent = 'Please enter a question.';
+        return;
+      }
+      if (answers.some(a => !a)) {
+        createError.textContent = 'Please enter all 4 answers.';
+        return;
+      }
+      if (correct === -1) {
+        createError.textContent = 'Please select the correct answer.';
+        return;
+      }
+
+      questions.push({ question: q, answers: answers, correct: correct });
+      questionsCount.textContent = `Questions entered: ${questions.length}`;
+      clearCreatePanel();
+    }
+
+    function finishInput() {
+      if (questions.length === 0) {
+        createError.textContent = 'Please add at least one question.';
+        return;
+      }
+      // Download as JSON
+      let dataStr = "data:text/plain;charset=utf-8," + encodeURIComponent(JSON.stringify(questions, null, 2));
+      let dlAnchor = document.createElement('a');
+      dlAnchor.setAttribute("href", dataStr);
+      dlAnchor.setAttribute("download", "quiz_questions.txt");
+      document.body.appendChild(dlAnchor);
+      dlAnchor.click();
+      dlAnchor.remove();
+
+      // Ask for team names
+      showPanel('team-names-panel');
+    }
+
+    // --- Upload logic ---
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+
+    dropZone.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.add('dragover');
+    });
+
+    dropZone.addEventListener('dragleave', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.remove('dragover');
+    });
+
+    dropZone.addEventListener('drop', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files && e.dataTransfer.files.length) {
+        handleFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', function(e) {
+      if (fileInput.files && fileInput.files.length) {
+        handleFile(fileInput.files[0]);
+      }
+    });
+
+    function handleFile(file) {
+      if (!file.name.endsWith('.txt')) {
+        uploadError.textContent = "Please upload a .txt file.";
+        return;
+      }
+      let reader = new FileReader();
+      reader.onload = function(evt) {
+        let content = evt.target.result;
+        try {
+          let parsed = JSON.parse(content);
+          // Validate structure
+          if (!Array.isArray(parsed) || !parsed.length) throw "Invalid file format";
+          for (let q of parsed) {
+            if (typeof q.question !== 'string' || !Array.isArray(q.answers) || q.answers.length !== 4 || typeof q.correct !== 'number') {
+              throw "Invalid question format";
+            }
+          }
+          questions = parsed;
+          showPanel('team-names-panel');
+        } catch (err) {
+          uploadError.textContent = "Could not parse file: " + err;
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // --- Team Names Logic ---
+    let teamNames = ["Team 1", "Team 2"];
+    let teamScores = [
+      { right: 0, wrong: 0, points: 0 },
+      { right: 0, wrong: 0, points: 0 }
+    ];
+    let teamNamesError = document.getElementById('team-names-error');
+
+    function startQuizWithTeams() {
+      let t1 = document.getElementById('team1-input').value.trim();
+      let t2 = document.getElementById('team2-input').value.trim();
+      if (!t1 || !t2) {
+        teamNamesError.textContent = "Please enter both team names.";
+        return;
+      }
+      teamNames = [t1, t2];
+      teamScores = [
+        { right: 0, wrong: 0, points: 0 },
+        { right: 0, wrong: 0, points: 0 }
+      ];
+      teamNamesError.textContent = "";
+      showPanel('quiz-panel');
+      startQuiz();
+    }
+
+    // --- Quiz logic ---
+    let quizIndex = 0;
+    let quizPanel = document.getElementById('quiz-panel');
+    let timerElem = document.getElementById('timer');
+    let quizQuestionElem = document.getElementById('quiz-question');
+    let quizAnswersElem = document.getElementById('quiz-answers');
+    let nextBtn = document.getElementById('next-btn');
+    let scoreboardElem = document.getElementById('scoreboard');
+    let pauseBtn = document.getElementById('pause-btn');
+    let timerId = null;
+    let timeLeft = 30;
+    let answered = false;
+    let currentTeam = 0; // 0 or 1
+    let questionStartTime = 0;
+    let paused = false;
+    let pauseTimestamp = 0;
+    let pauseAccumulated = 0;
+
+    // --- Background Music Logic ---
+    const bgMusic = document.getElementById('bg-music');
+
+    function playMusic() {
+      bgMusic.currentTime = 0;
+      bgMusic.volume = 0.4;
+      bgMusic.play().catch(() => {
+        document.body.addEventListener('click', resumeMusicOnce, { once: true });
+      });
+    }
+    function resumeMusicOnce() {
+      bgMusic.play();
+    }
+    function stopMusic() {
+      bgMusic.pause();
+      bgMusic.currentTime = 0;
+    }
+
+    function startQuiz() {
+      quizIndex = 0;
+      currentTeam = 0;
+      playMusic();
+      showQuizQuestion();
+      pauseBtn.style.display = 'inline-block';
+      pauseBtn.textContent = 'Pause';
+      paused = false;
+    }
+
+    function updateScoreboard() {
+      let questionsLeft = questions.length - quizIndex;
+      scoreboardElem.innerHTML = `
+        <span>שאלות שנותרו: ${questionsLeft}</span>
+        <span style="color:#0055aa">${teamNames[0]}: <b>${teamScores[0].points} pts</b></span>
+        <span style="color:#aa5500">${teamNames[1]}: <b>${teamScores[1].points} pts</b></span>
+      `;
+    }
+
+    function showQuizQuestion() {
+      answered = false;
+      nextBtn.classList.add('hidden');
+      updateScoreboard();
+      let q = questions[quizIndex];
+      document.getElementById('team-turn').textContent = `תור: ${teamNames[currentTeam]}`;
+      quizQuestionElem.innerHTML = `<b>Question ${quizIndex + 1}:</b> ${q.question}`;
+      quizAnswersElem.innerHTML = '';
+      q.answers.forEach((ans, i) => {
+        let btn = document.createElement('button');
+        btn.textContent = ans;
+        btn.className = 'answer';
+        btn.onclick = () => selectAnswer(i);
+        quizAnswersElem.appendChild(btn);
+        quizAnswersElem.appendChild(document.createElement('br'));
+      });
+      // Timer
+      timeLeft = 30;
+      timerElem.textContent = `זמן שנותר: ${timeLeft} seconds`;
+      questionStartTime = Date.now();
+      pauseAccumulated = 0;
+      startTimer();
+    }
+
+    function startTimer() {
+      clearInterval(timerId);
+      timerId = setInterval(() => {
+        if (!paused) {
+          timeLeft--;
+          timerElem.textContent = `זמן שנותר: ${timeLeft} seconds`;
+          if (timeLeft <= 0) {
+            clearInterval(timerId);
+            selectAnswer(-1); // Timeout
+          }
+        }
+      }, 1000);
+    }
+
+    // --- Pause/המשך Logic ---
+    function togglePause() {
+      if (!paused) {
+        paused = true;
+        pauseBtn.textContent = 'המשך';
+        pauseTimestamp = Date.now();
+        // Disable answer buttons
+        let buttons = quizAnswersElem.querySelectorAll('button');
+        buttons.forEach(btn => btn.disabled = true);
+      } else {
+        paused = false;
+        pauseBtn.textContent = 'Pause';
+        // Adjust questionStartTime for elapsed pause duration
+        pauseAccumulated += Date.now() - pauseTimestamp;
+        // Enable answer buttons if not answered
+        if (!answered) {
+          let buttons = quizAnswersElem.querySelectorAll('button');
+          buttons.forEach(btn => btn.disabled = false);
+        }
+      }
+    }
+
+    // --- Confetti Animation ---
+    function confettiBurst() {
+      const canvas = document.getElementById('confetti-canvas');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      canvas.style.display = 'block';
+      const ctx = canvas.getContext('2d');
+      let confetti = [];
+      let colors = ['#f44336','#e91e63','#9c27b0','#2196f3','#4caf50','#ffeb3b','#ff9800','#795548','#00bcd4','#8bc34a','#ffc107','#ff5722'];
+      for(let i=0;i<120;i++){
+        confetti.push({
+          x: Math.random()*canvas.width,
+          y: Math.random()*-canvas.height,
+          r: 6+Math.random()*6,
+          d: Math.random()*canvas.height/2,
+          color: colors[Math.floor(Math.random()*colors.length)],
+          tilt: Math.random()*20-10,
+          tiltAngleIncremental: (Math.random()*0.07)+.05,
+          tiltAngle: 0
+        });
+      }
+      let angle = 0;
+      let tiltAngle = 0;
+      let animationFrameId;
+      function draw() {
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        for(let i=0;i<confetti.length;i++){
+          let c = confetti[i];
+          ctx.beginPath();
+          ctx.lineWidth = c.r;
+          ctx.strokeStyle = c.color;
+          ctx.moveTo(c.x + c.tilt + c.r/3, c.y);
+          ctx.lineTo(c.x + c.tilt, c.y + c.tilt + c.r/5);
+          ctx.stroke();
+        }
+        update();
+      }
+      function update() {
+        angle += 0.01;
+        tiltAngle += 0.1;
+        for(let i=0;i<confetti.length;i++){
+          let c = confetti[i];
+          c.y += (Math.cos(angle + c.d) + 3 + c.r/2)/2;
+          c.x += Math.sin(angle);
+          c.tiltAngle += c.tiltAngleIncremental;
+          c.tilt = Math.sin(c.tiltAngle - (i%3)) * 15;
+        }
+      }
+      function loop() {
+        draw();
+        animationFrameId = requestAnimationFrame(loop);
+      }
+      loop();
+      setTimeout(()=>{
+        cancelAnimationFrame(animationFrameId);
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        canvas.style.display = 'none';
+      },1500);
+    }
+
+    function selectAnswer(selected) {
+      if (answered) return;
+      answered = true;
+      clearInterval(timerId);
+      let correct = questions[quizIndex].correct;
+      let buttons = quizAnswersElem.querySelectorAll('button');
+      buttons.forEach((btn, i) => {
+        btn.disabled = true;
+        if (i === correct) btn.style.background = '#aaffaa';
+        if (i === selected && selected !== correct) btn.style.background = '#ffaaaa';
+      });
+
+      let elapsed = (Date.now() - questionStartTime - pauseAccumulated) / 1000; // seconds
+
+      if (selected === correct) {
+  teamScores[currentTeam].right++;
+  if (elapsed <= 5) {
+        teamScores[currentTeam].points += 20;
+      } else if (elapsed <= 10) {
+        teamScores[currentTeam].points += 10;
+      } else {
+        teamScores[currentTeam].points += 5; // Give some points for correct but slow answer
+      }
+      updateScoreboard();
+      confettiBurst();
+        } else {
+        teamScores[currentTeam].wrong++;
+        updateScoreboard();
+      }
+      nextBtn.classList.remove('hidden');
+    }
+
+    function nextQuizQuestion() {
+      quizIndex++;
+      // Alternate team
+      currentTeam = 1 - currentTeam;
+      if (quizIndex < questions.length) {
+        showQuizQuestion();
+      } else {
+        showResult();
+      }
+    }
+
+    function showResult() {
+      quizPanel.classList.add('hidden');
+      document.getElementById('result-panel').classList.remove('hidden');
+      stopMusic();
+      pauseBtn.style.display = 'none';
+      let html = `
+        <h3>${teamNames[0]}</h3>
+        <p>תשובות נכונות: <b>${teamScores[0].right}</b></p>
+        <p>תשובות שגויות: <b>${teamScores[0].wrong}</b></p>
+        <p style="color:green;font-weight:bold;">נקודות: ${teamScores[0].points}</p>
+        <hr>
+        <h3>${teamNames[1]}</h3>
+        <p>תשובות נכונות: <b>${teamScores[1].right}</b></p>
+        <p>תשובות שגויות: <b>${teamScores[1].wrong}</b></p>
+        <p style="color:green;font-weight:bold;">נקודות: ${teamScores[1].points}</p>
+      `;
+      document.getElementById('result').innerHTML = html;
+    }
+
+    function restartQuiz() {
+      stopMusic();
+      location.reload();
+    }
+
+    // Resize confetti canvas on window resize
+    window.addEventListener('resize', function(){
+      const canvas = document.getElementById('confetti-canvas');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
+  </script>
+</body>
+</html>
